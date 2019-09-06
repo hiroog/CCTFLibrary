@@ -35,13 +35,6 @@ ConfigList= [ 'Debug', 'Release' ]
 if genv.getHostPlatform() == 'Windows':
     env= tool.createTargetEnvironment( 'Windows' )
     if env.isValid():
-        src_list2= [
-                "cctest.cpp",
-                "ccmnist.cpp",
-            ]
-        env.addLibraries( [
-                'tensorflow',
-            ] )
         env.addCCFlags( [
                 '-DNOMINMAX',
                 '-DCOMPILER_MSVC',
@@ -57,11 +50,6 @@ if genv.getHostPlatform() == 'Windows':
 if genv.getHostPlatform() == 'Linux':
     env= tool.createTargetEnvironment( 'Linux' )
     if env.isValid():
-        src_list2= [
-                #"mnisttest.cpp",
-                "cctest.cpp",
-                "ccmnist.cpp",
-            ]
         env.addCCFlags( [
                 '-frtti',
                 '-std=c++14',
@@ -72,12 +60,6 @@ if genv.getHostPlatform() == 'Linux':
                 '-Wl,--allow-multiple-definition',
                 '-Wl,--whole-archive',
                 ] )
-        env.addLibraries( [
-                'tensorflow',
-                ] )
-        env.addLibPaths( [
-                '/opt/rocm/lib',
-            ] )
         task= tool.addLibTasks( env, 'linux', TargetName, src_list, ConfigList, env.getSupportArchList() )
         tool.addNamedTask( genv, 'build', [task] )
 

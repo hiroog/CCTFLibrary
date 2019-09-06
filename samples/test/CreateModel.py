@@ -114,7 +114,7 @@ class Model_MNIST:
         y0= Input( (10,), 'yinput' )
         x= Conv2d( x0, (3,3), (1,1), 32 )
         x= ReLU( x )
-        x= MaxPool2d( x, (3,3), (3,3) )
+        x= MaxPool2d( x, (2,2), (2,2) )
         x= Flatten( x )
         x= Dense( x, 128 )
         x= ReLU( x )
@@ -148,7 +148,7 @@ class Model_MNIST:
         s= tf.Session( graph=graph )
         s.run( 'init' )
 
-        for e in range(10): #10
+        for e in range(20): #10
             for i in range(len(x_train)//batch_size):
                 shuffle= np.random.randint( len(x_train), size=batch_size )
                 x_data= x_train[shuffle]
