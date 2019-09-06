@@ -1,8 +1,9 @@
+syntax: glob
 *.pb
 *.index
 *.data-*
-*.idx3-ubyte
-*.idx1-ubyte
+data/*.idx3-ubyte
+data/*.idx1-ubyte
 # -- win
 *.lib
 *.dll
@@ -38,7 +39,7 @@ xcuserdata
 *.o
 *_x64_Debug
 *_x64_Release
-.hg
+.git
 __pycache__
 *.orig
 *.swp
