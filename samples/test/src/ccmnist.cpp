@@ -29,6 +29,7 @@ void	ccmnist()
 		CCBuffer	buffer;
 		buffer.LoadFile( "graph.pb" );
 		graph.Import( buffer, CCImportGraphDefOptions() );
+		graph.Dump();
 
 		{
 			CCOperation	init;

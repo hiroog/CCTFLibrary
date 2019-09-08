@@ -34,6 +34,8 @@ template<> struct CTypeToTFType<int8_t>		{ static constexpr TF_DataType val= TF_
 template<> struct CTypeToTFType<uint16_t>	{ static constexpr TF_DataType val= TF_UINT16; };
 #endif
 
+const char*	GetTypeString( TF_DataType type );
+
 
 //-----------------------------------------------------------------------------
 
@@ -229,11 +231,13 @@ class CCGraph : public CCPointer<TF_Graph> {
 public:
 	CCGraph();
 	~CCGraph();
+	void	Initialize();
 	void	Finalize();
 	CCOperationDescription	CreateOperation( CCOperation& op, const char* op_type, const char* name );
 	bool	Import( const CCBuffer& buffer, const CCImportGraphDefOptions& opt );
 	bool	Export( CCBuffer& buffer );
 	bool	FindOperation( CCOperation& op, const char* name );
+	void	GetOutputShape( CCShape& shape, const CCOperation& op, int index );
 	void	Dump();
 };
 
@@ -281,6 +285,9 @@ public:
 	bool	Run( const CCOperation*const* op_list, int op_count,
 					const CCRunParam* in_list, int in_count,
 					const CCRunParam* out_list, int out_count );
+	bool	Run( const TF_Operation*const* op_list, int op_count, 
+					const TF_Output* in_list, TF_Tensor*const* in_value_list, int in_count,
+					const TF_Output* out_list, TF_Tensor** out_value_list, int out_count );
 };
 
 

@@ -25,6 +25,53 @@ static bool	CCTF_CheckStatus( CCStatus& status, const char* text, int line )
 
 //-----------------------------------------------------------------------------
 
+#define	DATA_TYPE_DEF( name )	{	#name, TF_##name,	}
+const char*	GetTypeString( TF_DataType type )
+{
+	struct DataTypeString {
+		const char*	TypeName;
+		TF_DataType	Type;
+	};
+	static DataTypeString	type_list[]= {
+		{	"Unknown",	(TF_DataType)0,	},
+		DATA_TYPE_DEF( FLOAT ),
+		DATA_TYPE_DEF( DOUBLE ),
+		DATA_TYPE_DEF( INT32 ),
+		DATA_TYPE_DEF( UINT32 ),
+		DATA_TYPE_DEF( INT16 ),
+		DATA_TYPE_DEF( INT8 ),
+		DATA_TYPE_DEF( STRING ),
+		DATA_TYPE_DEF( COMPLEX ),
+		DATA_TYPE_DEF( INT64 ),
+		DATA_TYPE_DEF( BOOL ),
+		DATA_TYPE_DEF( QINT8 ),
+		DATA_TYPE_DEF( QUINT8 ),
+		DATA_TYPE_DEF( QINT32 ),
+		DATA_TYPE_DEF( BFLOAT16 ),
+		DATA_TYPE_DEF( QINT16 ),
+		DATA_TYPE_DEF( QUINT16 ),
+		DATA_TYPE_DEF( UINT16 ),
+		DATA_TYPE_DEF( COMPLEX128 ),
+		DATA_TYPE_DEF( HALF ),
+		DATA_TYPE_DEF( RESOURCE ),
+		DATA_TYPE_DEF( VARIANT ),
+		DATA_TYPE_DEF( UINT32 ),
+		DATA_TYPE_DEF( UINT64 ),
+	};
+	unsigned int	table_size= sizeof(type_list)/sizeof(DataTypeString);
+	unsigned int	index= (int)type;
+	if( index < table_size ){
+		const auto&	table= type_list[ (int)type ];
+		assert( table.Type == type );
+		return	table.TypeName;
+	}
+	return	"Error";
+}
+
+
+
+//-----------------------------------------------------------------------------
+
 CCStatus::CCStatus()
 {
 	iPointer= TF_NewStatus();
@@ -174,7 +221,6 @@ void	CCTensor::SetData( TF_DataType type, const CCShape& shape, const void* data
 
 bool	CCTensor::SetString( const char* text )
 {
-#if 1
 	Finalize();
 	constexpr int	STRING_OFFSET_SIZE= 8;
 	size_t	str_length= strlen(text);
@@ -188,22 +234,6 @@ bool	CCTensor::SetString( const char* text )
 		Finalize();
 	}
 	return	status.IsOK();
-#else
-	Finalize();
-	constexpr int	STRING_OFFSET_SIZE= 8;
-	size_t	str_length= strlen(text);
-	size_t	byte_size= TF_StringEncodedSize( str_length );
-	char*	buffer= CCSystem::AllocByte<char>( byte_size + STRING_OFFSET_SIZE );
-	memset( buffer, 0, STRING_OFFSET_SIZE );
-	CCStatus	status;
-	TF_StringEncode( text, str_length, buffer + STRING_OFFSET_SIZE, byte_size, status.IPointer() );
-	if( status.IsOK() ){
-		SetPointer( TF_NewTensor( TF_STRING, nullptr, 0, buffer, byte_size + STRING_OFFSET_SIZE, cb_Deallocator, this ) );
-	}else{
-		CCSystem::Free( buffer );
-	}
-	return	status.IsOK();
-#endif
 }
 
 TF_DataType	CCTensor::GetType() const
@@ -354,7 +384,10 @@ void	CCOperation::Dump_Input()
 	int	count= TF_OperationNumInputs( IPointer() );
 	for( int ci= 0 ; ci< count ; ci++ ){
 		TF_DataType	type= TF_OperationInputType( { IPointer(), ci } );
-		CC_PRINT( "  input[%d]=%d\n", ci, type );
+		TF_Output	input= TF_OperationInput( { IPointer(), ci } );
+		const char*	name= TF_OperationName( input.oper );
+		const char*	op_name= TF_OperationOpType( input.oper );
+		CC_PRINT( "  input[%d]=%s  ==> [%s] \"%s\"\n", ci, GetTypeString(type), op_name, name );
 	}
 }
 
@@ -363,7 +396,8 @@ void	CCOperation::Dump_Output()
 	int	count= TF_OperationNumOutputs( IPointer() );
 	for( int ci= 0 ; ci< count ; ci++ ){
 		TF_DataType	type= TF_OperationOutputType( { IPointer(), ci } );
-		CC_PRINT( "  output[%d]=%d\n", ci, type );
+		int	consumer_count= TF_OperationOutputNumConsumers( { IPointer(), ci } );
+		CC_PRINT( "  output[%d]=%s  consumer=%d\n", ci, GetTypeString(type), consumer_count );
 	}
 }
 
@@ -374,7 +408,7 @@ void	CCOperation::Dump()
 	const char*	device= TF_OperationDevice( IPointer() );
 	int			output_count= TF_OperationNumOutputs( IPointer() );
 	int			input_count= TF_OperationNumInputs( IPointer() );
-	CC_PRINT( "[%s] dev=%s name=%s input=%d output=%d\n",
+	CC_PRINT( "[%s] dev=%s name=\"%s\" input=%d output=%d\n",
 				op_type,
 				device,
 				name,
@@ -470,12 +504,18 @@ CCImportGraphDefOptions&	CCImportGraphDefOptions::SetDefaultDevice( const char* 
 
 CCGraph::CCGraph()
 {
-	iPointer= TF_NewGraph();
+	Initialize();
 }
 
 CCGraph::~CCGraph()
 {
 	Finalize();
+}
+
+void	CCGraph::Initialize()
+{
+	Finalize();
+	iPointer= TF_NewGraph();
 }
 
 void	CCGraph::Finalize()
@@ -518,6 +558,21 @@ bool	CCGraph::FindOperation( CCOperation& op, const char* name )
 	return	true;
 }
 
+void	CCGraph::GetOutputShape( CCShape& shape, const CCOperation& op, int index )
+{
+	CCStatus	status;
+	int	rank= TF_GraphGetTensorNumDims( IPointer(), { op.IPointer(), index }, status.IPointer() );
+	CCTF_CHECK_STATUS( status );
+	if( rank >= 1 ){
+		assert( (unsigned int)rank <= CCShape::RANK_MAX );
+		int64_t	dims[CCShape::RANK_MAX];
+		TF_GraphGetTensorShape( IPointer(), { op.IPointer(), index }, dims, rank, status.IPointer() );
+		shape.SetDims( dims, rank );
+	}else{
+		CC_PRINT( "Rank=%d\n", rank );
+	}
+}
+
 void	CCGraph::Dump()
 {
 	CCStatus	status;
@@ -532,17 +587,10 @@ void	CCGraph::Dump()
 		op.Dump();
 		int	count= op.GetOutputCount();
 		for( int ci= 0 ; ci< count ; ci++ ){
-			int	rank= TF_GraphGetTensorNumDims( IPointer(), { op.IPointer(), ci }, status.IPointer() );
-			CCTF_CHECK_STATUS( status );
-			if( rank >= 1 ){
-				assert( (unsigned int)rank <= CCShape::RANK_MAX );
-				int64_t	dims[CCShape::RANK_MAX];
-				TF_GraphGetTensorShape( IPointer(), { op.IPointer(), ci }, dims, rank, status.IPointer() );
-				CCShape	shape;
-				shape.SetDims( dims, rank );
-				CC_PRINT( "  shape[%d]: ", ci );
-				shape.Dump( "" );
-			}
+			CCShape	shape;
+			GetOutputShape( shape, op, ci );
+			CC_PRINT( "  out shape[%d]: ", ci );
+			shape.Dump( "" );
 		}
 	}
 }
@@ -658,6 +706,24 @@ bool	CCSession::Run( const CCOperation*const* op_list, int op_count,
 			out_list[ci].iTensor->SetPointer( out_pplist[ci] );
 		}
 	}
+	CCTF_CHECK_STATUS( status );
+	return	status.IsOK();
+}
+
+bool	CCSession::Run( const TF_Operation*const* op_list, int op_count, 
+			const TF_Output* in_list, TF_Tensor*const* in_value_list, int in_count,
+			const TF_Output* out_list, TF_Tensor** out_value_list, int out_count )
+{
+	CCStatus	status;
+	TF_SessionRun(
+			IPointer(),
+			nullptr,
+			in_list,	in_value_ptr,	in_count,
+			out_list,	out_value_ptr,	out_count,
+			op_list,	op_count,
+			nullptr,
+			status.IPointer()
+		);
 	CCTF_CHECK_STATUS( status );
 	return	status.IsOK();
 }
