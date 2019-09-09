@@ -718,8 +718,8 @@ bool	CCSession::Run( const TF_Operation*const* op_list, int op_count,
 	TF_SessionRun(
 			IPointer(),
 			nullptr,
-			in_list,	in_value_ptr,	in_count,
-			out_list,	out_value_ptr,	out_count,
+			in_list,	in_value_list,	in_count,
+			out_list,	out_value_list,	out_count,
 			op_list,	op_count,
 			nullptr,
 			status.IPointer()
