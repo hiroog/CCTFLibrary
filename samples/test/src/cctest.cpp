@@ -91,12 +91,22 @@ static void	cctest_3()
 			const float*	fptr= result.Map<float>();
 			for( int i= 0 ; i< 10 ; i++ ){
 				assert( fptr[i] == init_data1[i] + init_data2[i] );
+				if( fptr[i] != init_data1[i] + init_data2[i] ){
+					printf( "error %f = %f + %f\n", fptr[i], init_data1[i], init_data2[i] );
+				}
 			}
 		}
 	}
 	printf( "OK %s\n", __func__ );
 }
 
+static void	cctest_4()
+{
+	CCTensor	tensor;
+	tensor.Set( true );
+
+	printf( "OK %s\n", __func__ );
+}
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
@@ -107,6 +117,7 @@ void	cctest()
 	cctest_1();
 	cctest_2();
 	cctest_3();
+	cctest_4();
 }
 
 

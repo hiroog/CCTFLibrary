@@ -4,6 +4,10 @@ syntax: glob
 *.data-*
 data/*.idx3-ubyte
 data/*.idx1-ubyte
+*.h5
+*.dnn
+events.out.*
+*.pb.txt
 # -- win
 *.lib
 *.dll

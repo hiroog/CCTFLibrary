@@ -3,6 +3,9 @@
 *.data-*
 *.idx3-ubyte
 *.idx1-ubyte
+tensorboard*
+*_LLAPI.py
+*_backup.py
 # -- win
 *.lib
 *.dll

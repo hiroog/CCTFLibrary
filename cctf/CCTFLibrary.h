@@ -5,9 +5,17 @@
 #define	CCTFLIBRARY_H_
 
 #include	<assert.h>
+#ifdef _WIN32
+# pragma warning(push)
+# pragma warning(disable:4190)
+#endif
 #include	<tensorflow/c/c_api.h>
+#ifdef _WIN32
+# pragma warning(pop)
+#endif
 #include	<cctf/CCTFShape.h>
 
+#include	<utility>
 
 namespace cctf {
 //-----------------------------------------------------------------------------
@@ -22,6 +30,7 @@ template<> constexpr TF_DataType	CTypeToTFType<uint8_t>	= TF_UINT8;
 template<> constexpr TF_DataType	CTypeToTFType<int16_t>	= TF_INT16;
 template<> constexpr TF_DataType	CTypeToTFType<int8_t>	= TF_INT8;
 template<> constexpr TF_DataType	CTypeToTFType<uint16_t>	= TF_UINT16;
+template<> constexpr TF_DataType	CTypeToTFType<bool>		= TF_BOOL;
 #else
 template<typename T>
 struct CTypeToTFType {};
@@ -32,6 +41,7 @@ template<> struct CTypeToTFType<uint8_t>	{ static constexpr TF_DataType val= TF_
 template<> struct CTypeToTFType<int16_t>	{ static constexpr TF_DataType val= TF_INT16; };
 template<> struct CTypeToTFType<int8_t>		{ static constexpr TF_DataType val= TF_INT8; };
 template<> struct CTypeToTFType<uint16_t>	{ static constexpr TF_DataType val= TF_UINT16; };
+template<> struct CTypeToTFType<bool>		{ static constexpr TF_DataType val= TF_BOOL; };
 #endif
 
 const char*	GetTypeString( TF_DataType type );
@@ -43,16 +53,9 @@ template<typename T>
 class CCPointer {
 protected:
 	T*	iPointer= nullptr;
-	CCPointer& operator=( const CCPointer& )= delete;
-	CCPointer( const CCPointer& )= default;
 public:
 	CCPointer()
 	{
-	}
-	CCPointer( CCPointer&& src )
-	{
-		iPointer= src;
-		src.iPointer= nullptr;
 	}
 	~CCPointer()
 	{
@@ -70,6 +73,15 @@ public:
 	{
 		assert( iPointer == nullptr );
 		iPointer= ptr;
+		assert( iPointer != nullptr );
+	}
+	bool	IsValid() const
+	{
+		return	iPointer != nullptr;
+	}
+	void	ForceDetach()
+	{
+		iPointer= nullptr;
 	}
 };
 
@@ -118,19 +130,32 @@ class CCTensor : public CCPointer<TF_Tensor> {
 	CCTensor& operator=( const CCTensor& )= delete;
 protected:
 	static void	cb_Deallocator( void* data, size_t size, void* arg );
+	static void	cb_DeallocatorNop( void*, size_t, void* );
 public:
 	CCTensor();
+	explicit CCTensor( TF_DataType type );
 	CCTensor( TF_DataType type, const CCShape& shape );
 	~CCTensor();
 	void	Finalize();
 	void	Allocate( TF_DataType type, const CCShape& shape );
+	void	AllocScalar( TF_DataType type );
 	void	SetData( TF_DataType type, const CCShape& shape, const void* data, size_t data_size );
+	void	SetBuffer( TF_DataType type, const CCShape& shape, void* buffer, size_t buffer_size, bool auto_delete= true );
 	template<typename T>
 	void	Set( const CCShape& shape, const T* data, size_t count )
 	{
 		SetData( CTypeToTFType<T>::val, shape, data, sizeof(T) * count );
 	}
 	bool	SetString( const char* text );
+	template<typename T>
+	void	Set( const T& data )
+	{
+		assert( sizeof(T) == TF_DataTypeSize( CTypeToTFType<T>::val ) );
+		if( !iPointer ){
+			AllocScalar( CTypeToTFType<T>::val );
+		}
+		*Map<T>()= data;
+	}
 	TF_DataType	GetType() const;
 	size_t	GetByteSize() const;
 	int64_t	GetElementCount() const;
@@ -149,11 +174,15 @@ public:
 
 class CCOperation : public CCPointer<TF_Operation> {
 public:
+	CCOperation( const CCOperation& )= default;
+	CCOperation& operator=( const CCOperation& )= default;
 	CCOperation();
 	~CCOperation();
-	void	Finalize();
 	int		GetInputCount() const;
 	int		GetOutputCount() const;
+	bool	GetInput( CCOperation& result, int index ) const;
+	const char*	GetName() const;
+	const char*	GetOpType() const;
 	const char*	GetDevice() const;
 	void	Dump_Input();
 	void	Dump_Output();
@@ -236,7 +265,7 @@ public:
 	CCOperationDescription	CreateOperation( CCOperation& op, const char* op_type, const char* name );
 	bool	Import( const CCBuffer& buffer, const CCImportGraphDefOptions& opt );
 	bool	Export( CCBuffer& buffer );
-	bool	FindOperation( CCOperation& op, const char* name );
+	bool	FindOperation( CCOperation& op, const char* name ) const;
 	void	GetOutputShape( CCShape& shape, const CCOperation& op, int index );
 	void	Dump();
 };
@@ -261,6 +290,11 @@ struct CCRunParam {
 	CCTensor*	iTensor= nullptr;
 	int		Index= 0;
 public:
+	CCRunParam() = default;
+	CCRunParam( const CCOperation& op, int index, const CCTensor& tensor ) :
+		iOp( &op ), iTensor( const_cast<CCTensor*>(&tensor) ), Index( index )
+	{
+	}
 	CCRunParam( const CCOperation& op, int index, CCTensor& tensor ) :
 		iOp( &op ), iTensor( &tensor ), Index( index )
 	{

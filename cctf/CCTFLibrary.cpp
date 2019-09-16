@@ -179,8 +179,17 @@ void	CCTensor::cb_Deallocator( void* data, size_t size, void* arg )
 	CCSystem::Free( data, size );
 }
 
+void	CCTensor::cb_DeallocatorNop( void*, size_t, void* )
+{
+}
+
 CCTensor::CCTensor()
 {
+}
+
+CCTensor::CCTensor( TF_DataType type )
+{
+	AllocScalar( type );
 }
 
 CCTensor::CCTensor( TF_DataType type, const CCShape& shape )
@@ -209,6 +218,13 @@ void	CCTensor::Allocate( TF_DataType type, const CCShape& shape )
 	SetPointer( TF_AllocateTensor( type, dims, rank, shape.GetElementCount() * TF_DataTypeSize( type ) ) );
 }
 
+void	CCTensor::AllocScalar( TF_DataType type )
+{
+	Finalize();
+	size_t	byte_size= TF_DataTypeSize( type );
+	SetPointer( TF_AllocateTensor( TF_BOOL, nullptr, 0, byte_size ) );
+}
+
 void	CCTensor::SetData( TF_DataType type, const CCShape& shape, const void* data, size_t data_size )
 {
 	Finalize();
@@ -217,6 +233,19 @@ void	CCTensor::SetData( TF_DataType type, const CCShape& shape, const void* data
 	int64_t	dims[CCShape::RANK_MAX];
 	int	rank= shape.GetDims( dims, CCShape::RANK_MAX );
 	SetPointer( TF_NewTensor( type, dims, rank, buffer, data_size, cb_Deallocator, this ) );
+}
+
+void	CCTensor::SetBuffer( TF_DataType type, const CCShape& shape, void* buffer, size_t buffer_size, bool auto_delete )
+{
+	Finalize();
+	int64_t	dims[CCShape::RANK_MAX];
+	int	rank= shape.GetDims( dims, CCShape::RANK_MAX );
+	auto	ptr= TF_NewTensor( type, dims, rank, buffer, buffer_size, auto_delete ? cb_Deallocator : cb_DeallocatorNop, this );
+	if( ptr == nullptr ){
+		CC_ERROR( "TF_NewTensor Error type=%d rank=%d size=%d\n", type, rank, buffer_size );
+	}
+	SetPointer( ptr );
+//	SetPointer( TF_NewTensor( type, dims, rank, buffer, buffer_size, auto_delete ? cb_Deallocator : cb_DeallocatorNop, this ) );
 }
 
 bool	CCTensor::SetString( const char* text )
@@ -360,10 +389,6 @@ CCOperation::~CCOperation()
 {
 }
 
-void	CCOperation::Finalize()
-{
-}
-
 int		CCOperation::GetInputCount() const
 {
 	return	TF_OperationNumInputs( IPointer() );
@@ -372,6 +397,29 @@ int		CCOperation::GetInputCount() const
 int		CCOperation::GetOutputCount() const
 {
 	return	TF_OperationNumOutputs( IPointer() );
+}
+
+bool	CCOperation::GetInput( CCOperation& result, int index ) const
+{
+	int	count= TF_OperationNumInputs( IPointer() );
+	assert( index < count );
+	if( index < count ){
+		result.iPointer= nullptr;
+		return	false;
+	}
+	TF_Output	input= TF_OperationInput( { IPointer(), index } );
+	result.iPointer= input.oper;
+	return	true;
+}
+
+const char*	CCOperation::GetName() const
+{
+	return	TF_OperationName( IPointer() );
+}
+
+const char*	CCOperation::GetOpType() const
+{
+	return	TF_OperationOpType( IPointer() );
 }
 
 const char*	CCOperation::GetDevice() const
@@ -547,7 +595,7 @@ bool	CCGraph::Export( CCBuffer& buffer )
 	return	status.IsOK();
 }
 
-bool	CCGraph::FindOperation( CCOperation& op, const char* name )
+bool	CCGraph::FindOperation( CCOperation& op, const char* name ) const
 {
 	auto*	ptr= TF_GraphOperationByName( IPointer(), name );
 	if( !ptr ){
@@ -655,7 +703,7 @@ bool	CCSession::Run( const CCOperation*const* op_list, int op_count,
 			const CCRunParam* in_list, int in_count,
 			const CCRunParam* out_list, int out_count )
 {
-	constexpr int	MAX_INOUT= 8;
+	constexpr int	MAX_INOUT= 16;
 	CCStatus	status;
 	const TF_Output*	in_ptr= nullptr;
 	TF_Output			in_output[MAX_INOUT];

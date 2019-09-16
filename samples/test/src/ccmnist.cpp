@@ -9,6 +9,7 @@
 
 using namespace cctf;
 
+
 void	ccmnist()
 {
 	constexpr int	BATCH_SIZE= 128;
@@ -27,9 +28,8 @@ void	ccmnist()
 
 	{
 		CCBuffer	buffer;
-		buffer.LoadFile( "graph.pb" );
+		buffer.LoadFile( "model.pb" );
 		graph.Import( buffer, CCImportGraphDefOptions() );
-		graph.Dump();
 
 		{
 			CCOperation	init;
@@ -42,7 +42,7 @@ void	ccmnist()
 		}
 
 		CCOperation	xinput;
-		graph.FindOperation( xinput, "xinput" );
+		graph.FindOperation( xinput, "xinput0" );
 
 		{
 			CCOperation	train;
@@ -52,17 +52,25 @@ void	ccmnist()
 			graph.FindOperation( yinput, "yinput" );
 
 			CCOperation	loss;
-			graph.FindOperation( loss, "loss" );
+			graph.FindOperation( loss, "loss_func" );
+
+			CCOperation	learning_phase;
+			bool	phase= graph.FindOperation( learning_phase, "keras_learning_phase" );
 
 			CCOperation*	op_list[]= { &train };
 
 			CCTensor	x( TF_FLOAT, {BATCH_SIZE,1,28,28} );
 			CCTensor	y( TF_FLOAT, {BATCH_SIZE,10} );
+			CCTensor	learning;
 
-			CCRunParam	input[]= {
+			CCRunParam	input[3]= {
 					{ xinput, 0, x },
 					{ yinput, 0, y },
 				};
+			if( phase ){
+				learning.Set( true );
+				input[2]= { learning_phase, 0, learning };
+			}
 
 			CCTensor	loss_val;
 			CCRunParam	output[]= {
@@ -80,15 +88,9 @@ void	ccmnist()
 					image+= 28*28;
 					label+= 10;
 				}
-				session.Run(
-					op_list, 1,
-					input, 2,
-					nullptr, 0 );
+				session.Run( op_list, 1, input, 2 + phase, nullptr, 0 );
 				if( ei % 100 == 0 ){
-					session.Run(
-						nullptr, 0,
-						input, 2,
-						output, 1 );
+					session.Run( nullptr, 0, input, 2, output, 1 );
 					CC_PRINT( "ei=%d/%d loss=%f\n", ei, LOOP_COUNT, loss_val.Map<float>()[0] );
 					loss_val.Finalize();
 				}
@@ -136,10 +138,7 @@ void	ccmnist()
 					labels[bi]= loader.GetLabel( ri, true );
 					image+= 28*28;
 				}
-				session.Run(
-					nullptr, 0,
-					input, 1,
-					output, 1 );
+				session.Run( nullptr, 0, input, 1, output, 1 );
 				float*	label= y.Map<float>();
 				for( int bi= 0 ; bi< BATCH_SIZE ; bi++ ){
 					unsigned int	result= MNIST_Loader::ArgMax10( label );
