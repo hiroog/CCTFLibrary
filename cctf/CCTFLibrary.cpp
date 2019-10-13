@@ -6,6 +6,8 @@
 #include	"CCTFLibrary.h"
 #include	"CCTFSystem.h"
 
+#define	USE_TENSORFLOW_R1_14		0
+
 
 namespace cctf {
 //-----------------------------------------------------------------------------
@@ -272,7 +274,13 @@ TF_DataType	CCTensor::GetType() const
 
 int64_t	CCTensor::GetElementCount() const
 {
+#if USE_TENSORFLOW_R1_14
 	return	TF_TensorElementCount( IPointer() );
+#else
+	CCShape	shape;
+	GetShape( shape );
+	return	shape.GetElementCount();
+#endif
 }
 
 size_t	CCTensor::GetByteSize() const
@@ -543,7 +551,11 @@ void	CCImportGraphDefOptions::Finalize()
 
 CCImportGraphDefOptions&	CCImportGraphDefOptions::SetDefaultDevice( const char* device )
 {
+#if USE_TENSORFLOW_R1_14
 	TF_ImportGraphDefOptionsSetDefaultDevice( IPointer(), device );
+#else	
+	assert( 0 );
+#endif
 	return	*this;
 }
 

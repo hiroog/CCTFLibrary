@@ -343,7 +343,8 @@ def main( argv ):
         elif arg == '-m' or arg == '--mnist':
             model_class= MNIST_Keras_Model
         elif arg == '--download':
-            import keras
+            from tensorflow import keras
+            #import keras
             mnist_loader( keras ).save()
             return  0
         else:
